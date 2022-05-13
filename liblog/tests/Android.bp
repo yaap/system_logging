@@ -117,6 +117,7 @@ cc_test_host {
         "liblog_host_test.cpp",
         "liblog_default_tag.cpp",
         "liblog_global_state.cpp",
+        "logprint_test.cpp",
     ],
     isolated: true,
 }
