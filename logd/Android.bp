@@ -81,8 +81,8 @@ cc_library_static {
     export_include_dirs: ["."],
 }
 
-cc_binary {
-    name: "logd",
+cc_defaults {
+    name: "logd_binary_defaults",
     defaults: ["logd_defaults"],
     init_rc: ["logd.rc"],
 
@@ -116,6 +116,20 @@ cc_binary {
         "libcap",
         "libutils",
     ],
+}
+
+cc_binary {
+    name: "logd",
+    defaults: ["logd_binary_defaults"],
+}
+
+cc_binary {
+    name: "logd.microdroid",
+    stem: "logd",
+    defaults: ["logd_binary_defaults"],
+    bootstrap: true,
+    installable: false,
+    visibility: ["//packages/modules/Virtualization/microdroid"],
 }
 
 cc_binary {
