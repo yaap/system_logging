@@ -24,7 +24,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t length) {
 
   size_t size = convertPrintable(nullptr, contents.data(), contents.size());
 
-  char buf[size];
+  char buf[size + 1];
   convertPrintable(buf, contents.data(), contents.size());
 
   return 0;
