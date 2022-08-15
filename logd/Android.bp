@@ -75,6 +75,7 @@ cc_library_static {
         "SimpleLogBuffer.cpp",
     ],
     static_libs: ["liblog"],
+    shared_libs: ["libbinder"],
     logtags: ["event.logtags"],
 
     export_include_dirs: ["."],
