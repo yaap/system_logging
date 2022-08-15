@@ -76,6 +76,7 @@ cc_library_static {
         ":ILogcatManagerService_aidl"
     ],
     static_libs: ["liblog"],
+    shared_libs: ["libbinder"],
     logtags: ["event.logtags"],
 
     export_include_dirs: ["."],
