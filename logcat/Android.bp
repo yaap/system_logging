@@ -67,7 +67,7 @@ cc_binary {
 
 sh_binary {
     name: "logcatd",
-    src: "logcatd",
+    src: "logcatd.sh",
 }
 
 sh_binary {
