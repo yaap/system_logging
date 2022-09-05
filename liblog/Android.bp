@@ -138,10 +138,16 @@ cc_defaults {
         // so make sure we do not regret hard-coding it as follows:
         "-DLIBLOG_LOG_TAG=1006",
         "-DSNET_EVENT_LOG_TAG=1397638484",
+        "-DANDROID_DEBUGGABLE=0"
     ],
     logtags: ["event.logtags"],
     compile_multilib: "both",
     afdo: true,
+    product_variables: {
+        debuggable: {
+            cflags: ["-UANDROID_DEBUGGABLE", "-DANDROID_DEBUGGABLE=1"],
+        }
+    }
 }
 
 cc_library {
