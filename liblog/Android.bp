@@ -138,16 +138,19 @@ cc_defaults {
         // so make sure we do not regret hard-coding it as follows:
         "-DLIBLOG_LOG_TAG=1006",
         "-DSNET_EVENT_LOG_TAG=1397638484",
-        "-DANDROID_DEBUGGABLE=0"
+        "-DANDROID_DEBUGGABLE=0",
     ],
     logtags: ["event.logtags"],
     compile_multilib: "both",
     afdo: true,
     product_variables: {
         debuggable: {
-            cflags: ["-UANDROID_DEBUGGABLE", "-DANDROID_DEBUGGABLE=1"],
-        }
-    }
+            cflags: [
+                "-UANDROID_DEBUGGABLE",
+                "-DANDROID_DEBUGGABLE=1",
+            ],
+        },
+    },
 }
 
 cc_library {
@@ -161,7 +164,10 @@ cc_library {
 
     stubs: {
         symbol_file: "liblog.map.txt",
-        versions: ["29", "30"],
+        versions: [
+            "29",
+            "30",
+        ],
     },
 
 }
@@ -198,6 +204,9 @@ ndk_library {
     symbol_file: "liblog.map.txt",
     first_version: "9",
     unversioned_until: "current",
+    export_header_libs: [
+        "liblog_ndk_headers",
+    ],
 }
 
 rust_bindgen {
