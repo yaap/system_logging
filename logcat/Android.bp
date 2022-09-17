@@ -30,8 +30,8 @@ license {
     ],
 }
 
-cc_defaults {
-    name: "logcat_defaults",
+cc_binary {
+    name: "logcat",
 
     cflags: [
         "-Wall",
@@ -48,21 +48,6 @@ cc_defaults {
     srcs: [
         "logcat.cpp",
     ],
-}
-
-cc_binary {
-    name: "logcat",
-
-    defaults: ["logcat_defaults"],
-}
-
-cc_binary {
-    name: "logcat.microdroid",
-    stem: "logcat",
-    defaults: ["logcat_defaults"],
-    bootstrap: true,
-    installable: false,
-    visibility: ["//packages/modules/Virtualization/microdroid"],
 }
 
 sh_binary {
