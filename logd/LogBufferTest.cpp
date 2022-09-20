@@ -447,5 +447,4 @@ TEST_P(LogBufferTest, tail100_blocking_50total_then1000more) {
     CompareLogMessages(expected_log_messages, blocking_reader.read_log_messages());
 }
 
-INSTANTIATE_TEST_CASE_P(LogBufferTests, LogBufferTest,
-                        testing::Values("chatty", "serialized", "simple"));
+INSTANTIATE_TEST_CASE_P(LogBufferTests, LogBufferTest, testing::Values("serialized", "simple"));
