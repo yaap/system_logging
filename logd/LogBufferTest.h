@@ -23,7 +23,6 @@
 
 #include <gtest/gtest.h>
 
-#include "ChattyLogBuffer.h"
 #include "LogBuffer.h"
 #include "LogReaderList.h"
 #include "LogStatistics.h"
@@ -74,9 +73,7 @@ class TestWriter : public LogWriter {
 class LogBufferTest : public testing::TestWithParam<std::string> {
   protected:
     void SetUp() override {
-        if (GetParam() == "chatty") {
-            log_buffer_.reset(new ChattyLogBuffer(&reader_list_, &tags_, &prune_, &stats_));
-        } else if (GetParam() == "serialized") {
+        if (GetParam() == "serialized") {
             log_buffer_.reset(new SerializedLogBuffer(&reader_list_, &tags_, &stats_));
         } else if (GetParam() == "simple") {
             log_buffer_.reset(new SimpleLogBuffer(&reader_list_, &tags_, &stats_));
