@@ -165,31 +165,42 @@ int32_t __android_log_get_minimum_priority() {
 }
 
 #ifdef __ANDROID__
-static char* file_logger_path = []() {
-  static char path[PROP_VALUE_MAX] = {};
-  if (__system_property_get("ro.log.file_logger.path", path) > 0) {
-    return path;
-  }
-  return (char*)nullptr;  // means file_logger should not be used
-}();
+static const char* get_file_logger_path() {
+  static const char* file_logger_path = []() {
+    static char path[PROP_VALUE_MAX] = {};
+    if (__system_property_get("ro.log.file_logger.path", path) > 0) {
+      return path;
+    }
+    return (char*)nullptr;  // means file_logger should not be used
+  }();
+  return file_logger_path;
+}
 #endif
 
 static void file_logger(const struct __android_log_message* log_message);
 
-static __android_logger_function logger_function = []() {
-#if __ANDROID__
-  if (file_logger_path != nullptr) {
-    return file_logger;
-  } else {
-    return __android_log_logd_logger;
+static __android_logger_function user_set_logger_function = nullptr;
+
+static __android_logger_function get_logger_function() {
+  if (user_set_logger_function != nullptr) {
+    return user_set_logger_function;
   }
+  static __android_logger_function default_logger_function = []() {
+#if __ANDROID__
+    if (get_file_logger_path() != nullptr) {
+      return file_logger;
+    } else {
+      return __android_log_logd_logger;
+    }
 #else
-  return file_logger;
+    return file_logger;
 #endif
-}();
+  }();
+  return default_logger_function;
+}
 
 void __android_log_set_logger(__android_logger_function logger) {
-  logger_function = logger;
+  user_set_logger_function = logger;
 }
 
 void __android_log_default_aborter(const char* abort_message) {
@@ -304,6 +315,7 @@ static void filestream_logger(const struct __android_log_message* log_message, F
 static void file_logger(const struct __android_log_message* log_message) {
   static FILE* stream = []() {
 #ifdef __ANDROID__
+    const char* file_logger_path = get_file_logger_path();
     if (file_logger_path != nullptr) {
       FILE* f = fopen(file_logger_path, "ae");
       if (f != nullptr) return f;
@@ -368,7 +380,7 @@ void __android_log_write_log_message(__android_log_message* log_message) {
   }
 #endif
 
-  logger_function(log_message);
+  get_logger_function()(log_message);
 }
 
 int __android_log_buf_write(int bufID, int prio, const char* tag, const char* msg) {
