@@ -795,7 +795,7 @@ int Logcat::Run(int argc, char** argv) {
                 return EXIT_SUCCESS;
 
             case '?':
-                error(EXIT_FAILURE, 0, "Unknown option '%s'.", argv[optind - 1]);
+                error(EXIT_FAILURE, 0, "Unknown option '%s'.", argv[optind]);
                 break;
 
             default:
