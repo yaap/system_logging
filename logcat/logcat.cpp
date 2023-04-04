@@ -272,11 +272,9 @@ void Logcat::SetupOutputAndSchedulingPolicy(bool blocking) {
 
 // clang-format off
 static void show_help() {
-    const char* cmd = getprogname();
+    printf(R"logcat(
+  Usage: logcat [OPTION]... [FILTERSPEC]...
 
-    fprintf(stderr, "Usage: %s [OPTION]... [FILTERSPEC]...\n", cmd);
-
-    fprintf(stderr, R"logcat(
   General options:
 
   -b BUFFER, --buffer=BUFFER
