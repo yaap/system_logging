@@ -14,6 +14,7 @@
      limitations under the License.
 -->
 <configuration description="Config to run logd integration tests">
+    <target_preparer class="com.android.tradefed.targetprep.RebootTargetPreparer" />
     <target_preparer class="com.android.tradefed.targetprep.RootTargetPreparer"/>
     <test class="com.android.tradefed.testtype.python.PythonBinaryHostTest" >
         <option name="par-file-name" value="logd_integration_test" />

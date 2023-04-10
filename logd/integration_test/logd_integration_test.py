@@ -19,7 +19,6 @@ import subprocess
 import unittest
 
 KNOWN_NON_LOGGING_SERVICES = [
-    "servicemanager",
     "vendor.ir-default",
 
     "SELF_TEST_SERVICE_DOES_NOT_EXIST",
