@@ -1099,8 +1099,8 @@ If you have enabled significant logging, look into using the -G option to increa
             WriteFully(&log_msg, log_msg.len());
         } else {
             ProcessBuffer(&log_msg);
-            if (blocking && output_file_ == stdout) fflush(stdout);
         }
+        if (blocking && output_file_ == stdout) fflush(stdout);
     }
     return EXIT_SUCCESS;
 }
