@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import re
 import subprocess
 import unittest
 
@@ -53,6 +54,29 @@ def iter_service_pids(test_case, services):
             continue
     test_case.assertTrue(a_service_worked)
 
+def get_dropped_logs(test_case, buffer):
+        output = subprocess.check_output(["adb", "logcat", "-b", buffer, "--statistics"]).decode()
+        output = iter(output.split("\n"))
+
+        res = []
+
+        # Search for these lines, in order. Consider output:
+        # :) adb logcat -b system -S | grep -E "Total|Now"
+        # size/num system             Total
+        # Total    883973/6792        883973/6792
+        # Now      883973/6792        883973/6792
+        for indication in ["Total", "Now"]:
+            reLineCount = re.compile(f"^{indication}.*\s+[0-9]+/([0-9]+)")
+            while True:
+                line = next(output)
+                match = reLineCount.match(line)
+                if match:
+                    res.append(int(match.group(1)))
+                    break
+
+        total, now = res
+        return total - now
+
 class LogdIntegrationTest(unittest.TestCase):
     def test_no_logs(self):
         for service, pid in iter_service_pids(self, KNOWN_NON_LOGGING_SERVICES):
@@ -65,6 +89,15 @@ class LogdIntegrationTest(unittest.TestCase):
             with self.subTest(service):
                 lines = get_pid_logs(pid)
                 self.assertTrue("\n" in lines, f"{service} ({pid}) should have logs, but found: {lines}")
+
+    def test_no_dropped_logs(self):
+        for buffer in ["system", "main", "kernel", "crash"]:
+            dropped = get_dropped_logs(self, buffer)
+            if buffer == "main":
+                # after b/276957640, should be able to reduce this to ~4000
+                self.assertLess(dropped, 30000, f"Buffer {buffer} has {dropped} dropped logs.")
+            else:
+                self.assertEqual(dropped, 0, f"Buffer {buffer} has {dropped} dropped logs.")
 
 def main():
     unittest.main(verbosity=3)
