@@ -23,7 +23,7 @@ rust_library {
     apex_available: [
         "//apex_available:anyapex",
         "//apex_available:platform",
-        "com.android.uwb",
+        "//apex_available:anyapex",
     ],
     min_sdk_version: "29",
 }
