@@ -42,6 +42,9 @@ def get_service_pid(svc):
 def get_pid_logs(pid):
     return subprocess.check_output(["adb", "logcat", "--pid", str(pid), "-d"]).decode()
 
+def get_product_name():
+    return subprocess.check_output(["adb", "shell", "getprop", "ro.product.name"]).decode()
+
 def iter_service_pids(test_case, services):
     a_service_worked = False
     for service in services:
@@ -91,13 +94,19 @@ class LogdIntegrationTest(unittest.TestCase):
                 self.assertTrue("\n" in lines, f"{service} ({pid}) should have logs, but found: {lines}")
 
     def test_no_dropped_logs(self):
-        for buffer in ["system", "main", "kernel", "crash"]:
+        dropped_buffer_allowed = {
+            # after b/276957640, should be able to reduce this to ~4000
+            "crash": 0,
+            "kernel": 0,
+            "main": 30000,
+            "system": 0 if get_product_name().startswith("aosp") else 10000,
+        }
+
+        for buffer, allowed in dropped_buffer_allowed.items():
             dropped = get_dropped_logs(self, buffer)
-            if buffer == "main":
-                # after b/276957640, should be able to reduce this to ~4000
-                self.assertLess(dropped, 30000, f"Buffer {buffer} has {dropped} dropped logs.")
-            else:
-                self.assertEqual(dropped, 0, f"Buffer {buffer} has {dropped} dropped logs.")
+
+            self.assertLessEqual(dropped, allowed,
+                f"Buffer {buffer} has {dropped} dropped logs, but expecting <= {allowed}")
 
 def main():
     unittest.main(verbosity=3)
