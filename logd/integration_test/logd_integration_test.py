@@ -95,10 +95,9 @@ class LogdIntegrationTest(unittest.TestCase):
 
     def test_no_dropped_logs(self):
         dropped_buffer_allowed = {
-            # after b/276957640, should be able to reduce this to ~4000
             "crash": 0,
             "kernel": 0,
-            "main": 30000,
+            "main": 4000,
             "system": 0 if get_product_name().startswith("aosp") else 10000,
         }
 
