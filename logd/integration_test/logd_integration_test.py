@@ -63,7 +63,7 @@ def iter_service_pids(test_case, services):
 
 def get_dropped_logs(test_case, buffer):
         output = subprocess.check_output(["adb", "logcat", "-b", buffer, "--statistics"]).decode()
-        output = iter(output.split("\n"))
+        lines = iter(output.split("\n"))
 
         res = []
 
@@ -75,14 +75,14 @@ def get_dropped_logs(test_case, buffer):
         for indication in ["Total", "Now"]:
             reLineCount = re.compile(f"^{indication}.*\s+[0-9]+/([0-9]+)")
             while True:
-                line = next(output)
+                line = next(lines)
                 match = reLineCount.match(line)
                 if match:
                     res.append(int(match.group(1)))
                     break
 
         total, now = res
-        return total - now
+        return total, now, output
 
 class LogdIntegrationTest(unittest.TestCase):
     def subTest(self, subtest_name):
@@ -123,10 +123,11 @@ class LogdIntegrationTest(unittest.TestCase):
 
         for buffer, allowed in dropped_buffer_allowed.items():
             with self.subTest(buffer + "_buffer_not_dropped"):
-                dropped = get_dropped_logs(self, buffer)
+                total, now, output = get_dropped_logs(self, buffer)
+                dropped = total - now
 
                 self.assertLessEqual(dropped, allowed,
-                    f"Buffer {buffer} has {dropped} dropped logs, but expecting <= {allowed}")
+                    f"Buffer {buffer} has {dropped} dropped logs (now {now} out of {total} total logs), but expecting <= {allowed}. {output}")
 
 def main():
     unittest.main(verbosity=3)
