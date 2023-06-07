@@ -26,7 +26,6 @@ KNOWN_NON_LOGGING_SERVICES = [
 ]
 
 KNOWN_LOGGING_SERVICES = [
-    "vendor.wifi_hal_legacy",
     "zygote",
 
     # b/210919187 - main log is too busy, gets dropped off
