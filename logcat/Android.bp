@@ -42,11 +42,13 @@ cc_binary {
     shared_libs: [
         "libbase",
         "libprocessgroup",
+        "libprotobuf-cpp-lite",
     ],
     static_libs: ["liblog"],
     logtags: ["event.logtags"],
     srcs: [
         "logcat.cpp",
+        "logcat.proto",
     ],
 }
 
