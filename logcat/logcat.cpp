@@ -682,8 +682,7 @@ int Logcat::Run(int argc, char** argv) {
                     }
 
                     if (!ParseUint(optarg, &pid) || pid < 1) {
-                        error(EXIT_FAILURE, 0, "%s %s out of range.",
-                              long_options[option_index].name, optarg);
+                        error(EXIT_FAILURE, 0, "pid '%s' out of range.", optarg);
                     }
                     break;
                 }
@@ -692,13 +691,11 @@ int Logcat::Run(int argc, char** argv) {
                     // ToDo: implement API that supports setting a wrap timeout
                     size_t timeout = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
                     if (optarg && (!ParseUint(optarg, &timeout) || timeout < 1)) {
-                        error(EXIT_FAILURE, 0, "%s %s out of range.",
-                              long_options[option_index].name, optarg);
+                        error(EXIT_FAILURE, 0, "wrap timeout '%s' out of range.", optarg);
                     }
                     if (timeout != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) {
-                        fprintf(stderr, "WARNING: %s %u seconds, ignoring %zu\n",
-                                long_options[option_index].name, ANDROID_LOG_WRAP_DEFAULT_TIMEOUT,
-                                timeout);
+                        fprintf(stderr, "WARNING: wrap timeout %zus, not default %us\n", timeout,
+                                ANDROID_LOG_WRAP_DEFAULT_TIMEOUT);
                     }
                     break;
                 }
@@ -820,8 +817,7 @@ int Logcat::Run(int argc, char** argv) {
                     } else {
                         log_id_t log_id = android_name_to_log_id(buffer.c_str());
                         if (log_id >= LOG_ID_MAX) {
-                            error(EXIT_FAILURE, 0, "Unknown buffer '%s' listed for -b.",
-                                  buffer.c_str());
+                            error(EXIT_FAILURE, 0, "Unknown -b buffer '%s'.", buffer.c_str());
                         }
                         if (log_id == LOG_ID_SECURITY) {
                             security_buffer_selected = true;
@@ -845,13 +841,13 @@ int Logcat::Run(int argc, char** argv) {
 
             case 'r':
                 if (!ParseUint(optarg, &log_rotate_size_kb_) || log_rotate_size_kb_ < 1) {
-                    error(EXIT_FAILURE, 0, "Invalid parameter '%s' to -r.", optarg);
+                    error(EXIT_FAILURE, 0, "Invalid -r '%s'.", optarg);
                 }
                 break;
 
             case 'n':
                 if (!ParseUint(optarg, &max_rotated_logs_) || max_rotated_logs_ < 1) {
-                    error(EXIT_FAILURE, 0, "Invalid parameter '%s' to -n.", optarg);
+                    error(EXIT_FAILURE, 0, "Invalid -n '%s'.", optarg);
                 }
                 break;
 
@@ -859,7 +855,7 @@ int Logcat::Run(int argc, char** argv) {
                 for (const auto& arg : Split(optarg, delimiters)) {
                     int err = SetLogFormat(arg.c_str());
                     if (err < 0) {
-                        error(EXIT_FAILURE, 0, "Invalid parameter '%s' to -v.", arg.c_str());
+                        error(EXIT_FAILURE, 0, "Invalid -v '%s'.", arg.c_str());
                     }
                     if (err) hasSetLogFormat = true;
                 }
@@ -944,7 +940,8 @@ int Logcat::Run(int argc, char** argv) {
     if (forceFilters.size()) {
         int err = android_log_addFilterString(logformat_.get(), forceFilters.c_str());
         if (err < 0) {
-            error(EXIT_FAILURE, 0, "Invalid filter expression in logcat args.");
+            error(EXIT_FAILURE, 0, "Invalid filter expression '%s' in logcat args.",
+                  forceFilters.c_str());
         }
     } else if (argc == optind) {
         // Add from environment variable
@@ -954,7 +951,8 @@ int Logcat::Run(int argc, char** argv) {
             int err = android_log_addFilterString(logformat_.get(), env_tags_orig);
 
             if (err < 0) {
-                error(EXIT_FAILURE, 0, "Invalid filter expression in ANDROID_LOG_TAGS.");
+                error(EXIT_FAILURE, 0, "Invalid filter expression '%s' in ANDROID_LOG_TAGS.",
+                      env_tags_orig);
             }
         }
     } else {
@@ -1091,7 +1089,7 @@ int Logcat::Run(int argc, char** argv) {
     if (setPruneList) {
         size_t len = strlen(setPruneList);
         if (android_logger_set_prune_list(logger_list.get(), setPruneList, len)) {
-            error(EXIT_FAILURE, 0, "Failed to set the prune list.");
+            error(EXIT_FAILURE, 0, "Failed to set the prune list to '%s'.", setPruneList);
         }
         return EXIT_SUCCESS;
     }
