@@ -57,6 +57,10 @@
 #include <private/android_logger.h>
 #include <processgroup/sched_policy.h>
 #include <system/thread_defs.h>
+#include "logcat.pb.h"
+
+using com::android::logcat::proto::LogcatEntryProto;
+using com::android::logcat::proto::LogcatPriorityProto;
 
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
@@ -68,6 +72,15 @@ using android::base::StringPrintf;
 using android::base::WaitForProperty;
 using android::base::WriteFully;
 
+namespace {
+enum OutputType {
+    TEXT,    // Human-readable formatted
+    BINARY,  // Raw struct log_msg as obtained from logd
+    PROTO    // Protobuffer format. See logcat.proto for details. Each message is prefixed with
+             // 8 bytes (little endian) size of the message.
+};
+}  // namespace
+
 class Logcat {
   public:
     int Run(int argc, char** argv);
@@ -75,6 +88,8 @@ class Logcat {
   private:
     void RotateLogs();
     void ProcessBuffer(struct log_msg* buf);
+    LogcatPriorityProto GetProtoPriority(const AndroidLogEntry& entry);
+    uint64_t PrintToProto(const AndroidLogEntry& entry);
     void PrintDividers(log_id_t log_id, bool print_dividers);
     void SetupOutputAndSchedulingPolicy(bool blocking);
     int SetLogFormat(const char* format_string);
@@ -97,8 +112,9 @@ class Logcat {
     size_t max_rotated_logs_ = DEFAULT_MAX_ROTATED_LOGS;  // 0 means "unbounded"
     uint64_t out_byte_count_ = 0;
 
+    enum OutputType output_type_ = TEXT;
+
     // For binary log buffers
-    int print_binary_ = 0;
     std::unique_ptr<EventTagMap, decltype(&android_closeEventTagMap)> event_tag_map_{
             nullptr, &android_closeEventTagMap};
     bool has_opened_event_tag_map_ = false;
@@ -216,14 +232,76 @@ void Logcat::ProcessBuffer(struct log_msg* buf) {
 
         print_count_ += match;
         if (match || print_it_anyway_) {
-            PrintDividers(buf->id(), print_dividers_);
-            out_byte_count_ += android_log_printLogLine(logformat_.get(), output_file_, &entry);
+            switch (output_type_) {
+                case TEXT: {
+                    PrintDividers(buf->id(), print_dividers_);
+                    out_byte_count_ +=
+                            android_log_printLogLine(logformat_.get(), output_file_, &entry);
+                    break;
+                }
+                case PROTO: {
+                    out_byte_count_ += PrintToProto(entry);
+                    break;
+                }
+                case BINARY: {
+                    error(EXIT_FAILURE, errno, "Binary output reached ProcessBuffer");
+                }
+            }
         }
     }
 
     if (log_rotate_size_kb_ > 0 && (out_byte_count_ / 1024) >= log_rotate_size_kb_) {
         RotateLogs();
     }
+}
+
+LogcatPriorityProto Logcat::GetProtoPriority(const AndroidLogEntry& entry) {
+    switch (entry.priority) {
+        case ANDROID_LOG_UNKNOWN:
+            return com::android::logcat::proto::UNKNOWN;
+        case ANDROID_LOG_DEFAULT:
+            return com::android::logcat::proto::DEFAULT;
+        case ANDROID_LOG_VERBOSE:
+            return com::android::logcat::proto::VERBOSE;
+        case ANDROID_LOG_DEBUG:
+            return com::android::logcat::proto::DEBUG;
+        case ANDROID_LOG_INFO:
+            return com::android::logcat::proto::INFO;
+        case ANDROID_LOG_WARN:
+            return com::android::logcat::proto::WARN;
+        case ANDROID_LOG_ERROR:
+            return com::android::logcat::proto::ERROR;
+        case ANDROID_LOG_FATAL:
+            return com::android::logcat::proto::FATAL;
+        case ANDROID_LOG_SILENT:
+            return com::android::logcat::proto::SILENT;
+    }
+    return com::android::logcat::proto::UNKNOWN;
+}
+uint64_t Logcat::PrintToProto(const AndroidLogEntry& entry) {
+    // Convert AndroidLogEntry to LogcatEntryProto
+    LogcatEntryProto proto;
+    proto.set_time_sec(entry.tv_sec);
+    proto.set_time_nsec(entry.tv_nsec);
+    proto.set_priority(GetProtoPriority(entry));
+    proto.set_uid(entry.uid);
+    proto.set_pid(entry.pid);
+    proto.set_tid(entry.tid);
+    proto.set_tag(entry.tag, entry.tagLen);
+    proto.set_message(entry.message, entry.messageLen);
+
+    // Serialize
+    std::string data;
+    proto.SerializeToString(&data);
+
+    uint64_t size = data.length();
+    WriteFully(&size, sizeof(size));
+
+    // Write proto
+    WriteFully(data.data(), data.length());
+
+    // Return how many bytes we wrote so log file rotation can happen
+    return sizeof(size) + sizeof(data.length());
 }
 
 void Logcat::PrintDividers(log_id_t log_id, bool print_dividers) {
@@ -300,6 +378,7 @@ static void show_help() {
   -v, --format=FORMAT         Sets log print format. See FORMAT below.
   -D, --dividers              Print dividers between each log buffer.
   -B, --binary                Output the log in binary.
+      --proto                 Output the log in protobuffer.
 
   Output files:
 
@@ -554,6 +633,7 @@ int Logcat::Run(int argc, char** argv) {
         static const char wrap_str[] = "wrap";
         static const char print_str[] = "print";
         static const char uid_str[] = "uid";
+        static const char proto_str[] = "proto";
         // clang-format off
         static const struct option long_options[] = {
           { "binary",        no_argument,       nullptr, 'B' },
@@ -575,6 +655,7 @@ int Logcat::Run(int argc, char** argv) {
           { pid_str,         required_argument, nullptr, 0 },
           { print_str,       no_argument,       nullptr, 0 },
           { "prune",         optional_argument, nullptr, 'p' },
+          { proto_str,         no_argument,       nullptr, 0 },
           { "regex",         required_argument, nullptr, 'e' },
           { "rotate-count",  required_argument, nullptr, 'n' },
           { "rotate-kbytes", required_argument, nullptr, 'r' },
@@ -641,6 +722,10 @@ int Logcat::Run(int argc, char** argv) {
                         }
                         uids.emplace(uid);
                     }
+                    break;
+                }
+                if (long_options[option_index].name == proto_str) {
+                    output_type_ = PROTO;
                     break;
                 }
                 break;
@@ -747,7 +832,7 @@ int Logcat::Run(int argc, char** argv) {
                 break;
 
             case 'B':
-                print_binary_ = 1;
+                output_type_ = BINARY;
                 break;
 
             case 'f':
@@ -1095,10 +1180,14 @@ If you have enabled significant logging, look into using the -G option to increa
             continue;
         }
 
-        if (print_binary_) {
-            WriteFully(&log_msg, log_msg.len());
-        } else {
-            ProcessBuffer(&log_msg);
+        switch (output_type_) {
+            case BINARY:
+                WriteFully(&log_msg, log_msg.len());
+                break;
+            case TEXT:
+            case PROTO:
+                ProcessBuffer(&log_msg);
+                break;
         }
         if (blocking && output_file_ == stdout) fflush(stdout);
     }
