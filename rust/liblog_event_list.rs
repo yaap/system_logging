@@ -72,6 +72,22 @@ impl LogContext {
         Ok(self)
     }
 
+    /// Appends an i64 to the context.
+    pub fn append_i64(self, data: i64) -> Result<Self, LogContextError> {
+        // This will only be called on a non-null pointer returned from create_android_logger
+        // previously, so should be safe.
+        check_liblog_result(unsafe { log_bindgen::android_log_write_int64(self.ctx, data) })?;
+        Ok(self)
+    }
+
+    /// Appends an f32 to the context.
+    pub fn append_f32(self, data: f32) -> Result<Self, LogContextError> {
+        // This will only be called on a non-null pointer returned from create_android_logger
+        // previously, so should be safe.
+        check_liblog_result(unsafe { log_bindgen::android_log_write_float32(self.ctx, data) })?;
+        Ok(self)
+    }
+
     /// Append a string to the context.
     pub fn append_str(self, data: &str) -> Result<Self, LogContextError> {
         // This will only be called on a non-null pointer returned from create_android_logger
@@ -84,6 +100,22 @@ impl LogContext {
                 data.len(),
             )
         })?;
+        Ok(self)
+    }
+
+    /// Begin a sublist of values.
+    pub fn begin_list(self) -> Result<Self, LogContextError> {
+        // This will only be called on a non-null pointer returned from create_android_logger
+        // previously, so should be safe.
+        check_liblog_result(unsafe { log_bindgen::android_log_write_list_begin(self.ctx) })?;
+        Ok(self)
+    }
+
+    /// End a sublist of values.
+    pub fn end_list(self) -> Result<Self, LogContextError> {
+        // This will only be called on a non-null pointer returned from create_android_logger
+        // previously, so should be safe.
+        check_liblog_result(unsafe { log_bindgen::android_log_write_list_end(self.ctx) })?;
         Ok(self)
     }
 
