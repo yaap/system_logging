@@ -25,4 +25,5 @@ message LogcatEntryProto {
   uint64 tid = 6;
   bytes tag = 7;
   bytes message = 8;
+  optional string process_name = 9;
 }
