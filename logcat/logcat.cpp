@@ -58,6 +58,7 @@
 #include <processgroup/sched_policy.h>
 #include <system/thread_defs.h>
 #include "logcat.pb.h"
+#include "process_names.h"
 
 using com::android::logcat::proto::LogcatEntryProto;
 using com::android::logcat::proto::LogcatPriorityProto;
@@ -131,6 +132,8 @@ class Logcat {
     bool printed_start_[LOG_ID_MAX] = {};
 
     bool debug_ = false;
+
+    ProcessNames process_names_;
 };
 
 static void pinLogFile(int fd, size_t sizeKB) {
@@ -289,6 +292,10 @@ uint64_t Logcat::PrintToProto(const AndroidLogEntry& entry) {
     proto.set_tid(entry.tid);
     proto.set_tag(entry.tag, entry.tagLen);
     proto.set_message(entry.message, entry.messageLen);
+    const std::string name = process_names_.Get(entry.pid);
+    if (!name.empty()) {
+        proto.set_process_name(name);
+    }
 
     // Serialize
     std::string data;
