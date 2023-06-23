@@ -253,16 +253,18 @@ static uint64_t GetThreadId() {
 
 static void filestream_logger(const struct __android_log_message* log_message, FILE* stream) {
   struct tm now;
-  time_t t = time(nullptr);
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
 
 #if defined(_WIN32)
-  localtime_s(&now, &t);
+  localtime_s(&now, &ts.tv_sec);
 #else
-  localtime_r(&t, &now);
+  localtime_r(&ts.tv_sec, &now);
 #endif
 
-  char timestamp[32];
-  strftime(timestamp, sizeof(timestamp), "%m-%d %H:%M:%S", &now);
+  char timestamp[sizeof("mm-DD HH::MM::SS.mmm\0")];
+  size_t n = strftime(timestamp, sizeof(timestamp), "%m-%d %H:%M:%S", &now);
+  snprintf(timestamp + n, sizeof(timestamp) - n, ".%03ld", ts.tv_nsec / (1000 * 1000));
 
   static const char log_characters[] = "XXVDIWEF";
   static_assert(arraysize(log_characters) - 1 == ANDROID_LOG_SILENT,
@@ -271,15 +273,14 @@ static void filestream_logger(const struct __android_log_message* log_message, F
       log_message->priority > ANDROID_LOG_SILENT ? ANDROID_LOG_FATAL : log_message->priority;
   char priority_char = log_characters[priority];
   uint64_t tid = GetThreadId();
+  const char* tag = log_message->tag ? log_message->tag : " nullptr";
 
   if (log_message->file != nullptr) {
-    fprintf(stream, "%s %c %s %5d %5" PRIu64 " %s:%u] %s\n",
-            log_message->tag ? log_message->tag : "nullptr", priority_char, timestamp, getpid(),
-            tid, log_message->file, log_message->line, log_message->message);
+    fprintf(stream, "%s %5d %5" PRIu64 " %c %-8s: %s:%u %s\n", timestamp, getpid(), tid,
+            priority_char, tag, log_message->file, log_message->line, log_message->message);
   } else {
-    fprintf(stream, "%s %c %s %5d %5" PRIu64 "] %s\n",
-            log_message->tag ? log_message->tag : "nullptr", priority_char, timestamp, getpid(),
-            tid, log_message->message);
+    fprintf(stream, "%s %5d %5" PRIu64 " %c %-8s: %s\n", timestamp, getpid(), tid, priority_char,
+            tag, log_message->message);
   }
 }
 
