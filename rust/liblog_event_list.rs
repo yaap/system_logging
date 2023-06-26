@@ -31,10 +31,10 @@ pub struct LogContextError;
 
 /// Convert liblog status code into a Result.
 fn check_liblog_result(status: i32) -> Result<(), LogContextError> {
-    if status == 0 {
-        Ok(())
-    } else {
+    if status < 0 {
         Err(LogContextError)
+    } else {
+        Ok(())
     }
 }
 
