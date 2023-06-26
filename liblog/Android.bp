@@ -217,7 +217,6 @@ rust_bindgen {
     source_stem: "bindings",
 
     bindgen_flags: [
-        "--size_t-is-usize",
         "--allowlist-function=create_android_logger",
         "--allowlist-function=android_log_destroy",
         "--allowlist-function=android_log_write_int32",
