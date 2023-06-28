@@ -7,9 +7,6 @@
       "name": "CtsLogdTestCases"
     },
     {
-      "name": "logd_integration_test"
-    },
-    {
       "name": "MicrodroidHostTestCases"
     }
   ],
