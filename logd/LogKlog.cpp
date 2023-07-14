@@ -206,7 +206,6 @@ LogKlog::LogKlog(LogBuffer* buf, int fdWrite, int fdRead, bool auditd, LogStatis
       logbuf(buf),
       signature(CLOCK_MONOTONIC),
       initialized(false),
-      enableLogging(true),
       auditd(auditd),
       stats_(stats) {
     static const char klogd_message[] = "%s%s%" PRIu64 "\n";
@@ -221,7 +220,6 @@ bool LogKlog::onDataAvailable(SocketClient* cli) {
     if (!initialized) {
         prctl(PR_SET_NAME, "logd.klogd");
         initialized = true;
-        enableLogging = false;
     }
 
     char buffer[LOGGER_ENTRY_MAX_PAYLOAD];
@@ -498,25 +496,7 @@ int LogKlog::log(const char* buf, ssize_t len) {
     int pri = parseKernelPrio(p, len);
 
     log_time now = sniffTime(p, len - (p - buf), false);
-
-    // sniff for start marker
-    const char* start = android::strnstr(p, len - (p - buf), klogdStr);
-    if (start) {
-        uint64_t sig = strtoll(start + strlen(klogdStr), nullptr, 10);
-        if (sig == signature.nsec()) {
-            if (initialized) {
-                enableLogging = true;
-            } else {
-                enableLogging = false;
-            }
-            return -1;
-        }
-        return 0;
-    }
-
-    if (!enableLogging) {
-        return 0;
-    }
+    const char* start;
 
     // Parse pid, tid and uid
     const pid_t pid = sniffPid(p, len - (p - buf));
