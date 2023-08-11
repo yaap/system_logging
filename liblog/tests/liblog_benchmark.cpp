@@ -888,7 +888,7 @@ static void send_to_control(char* buf, size_t len) {
     return;
   }
   while ((ret = read(sock, buf, len)) > 0) {
-    if (((size_t)ret == len) || (len < PAGE_SIZE)) {
+    if ((size_t)ret == len) {
       break;
     }
     len -= ret;
