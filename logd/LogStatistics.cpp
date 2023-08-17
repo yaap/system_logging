@@ -111,14 +111,21 @@ char* pidToName(pid_t pid) {
 }
 
 void LogStatistics::AddTotal(log_id_t log_id, uint16_t size) {
-    auto lock = std::lock_guard{lock_};
+    if (!enable) {
+        return;
+    }
 
+    auto lock = std::lock_guard{lock_};
     mSizesTotal[log_id] += size;
     SizesTotal += size;
     ++mElementsTotal[log_id];
 }
 
 void LogStatistics::Add(LogStatisticsElement element) {
+    if (!enable) {
+        return;
+    }
+
     auto lock = std::lock_guard{lock_};
 
     if (!track_total_size_) {
@@ -181,6 +188,10 @@ void LogStatistics::Add(LogStatisticsElement element) {
 }
 
 void LogStatistics::Subtract(LogStatisticsElement element) {
+    if (!enable) {
+        return;
+    }
+
     auto lock = std::lock_guard{lock_};
 
     if (!track_total_size_) {
@@ -231,6 +242,10 @@ const char* LogStatistics::UidToName(uid_t uid) const {
 
 // caller must own and free character string
 const char* LogStatistics::UidToNameLocked(uid_t uid) const {
+    if (!enable) {
+        return strdup("logd");
+    }
+
     // Local hard coded favourites
     if (uid == AID_LOGD) {
         return strdup("auditd");
@@ -572,6 +587,10 @@ std::string LogStatistics::FormatTable(const LogHashtable<TKey, TEntry>& table, 
 }
 
 std::string LogStatistics::ReportInteresting() const {
+    if (!enable) {
+        return std::string("");
+    }
+
     auto lock = std::lock_guard{lock_};
 
     std::vector<std::string> items;
@@ -597,6 +616,10 @@ std::string LogStatistics::ReportInteresting() const {
 }
 
 std::string LogStatistics::Format(uid_t uid, pid_t pid, unsigned int logMask) const {
+    if (!enable) {
+        return std::string("");
+    }
+
     auto lock = std::lock_guard{lock_};
 
     static const uint16_t spaces_total = 19;
