@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <linux/f2fs.h>
+#include <malloc.h>
 #include <math.h>
 #include <sched.h>
 #include <stdarg.h>
@@ -1147,6 +1148,11 @@ int Logcat::Run(int argc, char** argv) {
 
     bool blocking = !(mode & ANDROID_LOG_NONBLOCK);
     SetupOutputAndSchedulingPolicy(blocking);
+
+    // Purge as much memory as possible before going into the log reading loop.
+    // Do this before checking if logd is ready just in case logd isn't
+    // ready and this call can be done without penalizing start up.
+    mallopt(M_PURGE_ALL, 0);
 
     if (!WaitForProperty("logd.ready", "true", std::chrono::seconds(1))) {
         error(EXIT_FAILURE, 0, "Failed to wait for logd.ready to become true. logd not running?");
