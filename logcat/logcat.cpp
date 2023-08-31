@@ -1171,8 +1171,13 @@ If you have enabled significant logging, look into using the -G option to increa
         }
 
         if (ret < 0) {
-            if (ret == -EAGAIN) break;
-
+            if (ret == -EAGAIN || ret == -EWOULDBLOCK || ret == -ETIMEDOUT) {
+                // For non-blocking mode, a socket with a 2s timeout is used to read logs.
+                // Either recv returned -EAGAIN or -EWOULDBLOCK (see man recv)
+                // or connect returned -EAGAIN or -ETIMEOUT.
+                // In either case, the caller should call logcat again at a later time.
+                break;
+            }
             if (ret == -EIO) {
                 error(EXIT_FAILURE, 0, "Unexpected EOF!");
             }

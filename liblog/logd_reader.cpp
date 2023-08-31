@@ -281,7 +281,8 @@ static int logdOpen(struct logger_list* logger_list) {
     return sock;
   }
 
-  sock = socket_local_client("logdr", SOCK_SEQPACKET, false);
+  sock = socket_local_client("logdr", SOCK_SEQPACKET,
+                             (logger_list->mode & ANDROID_LOG_NONBLOCK) ? true : false);
   if (sock <= 0) {
     if ((sock == -1) && errno) {
       return -errno;
