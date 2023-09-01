@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <linux/f2fs.h>
+#include <linux/fs.h>
 #include <malloc.h>
 #include <math.h>
 #include <sched.h>
@@ -88,6 +89,7 @@ class Logcat {
     int Run(int argc, char** argv);
 
   private:
+    FILE* OpenLogFile(const char* path, size_t sizeKB);
     void RotateLogs();
     void ProcessBuffer(struct log_msg* buf);
     LogcatPriorityProto GetProtoPriority(const AndroidLogEntry& entry);
@@ -100,6 +102,8 @@ class Logcat {
             error(EXIT_FAILURE, errno, "Write to output file failed");
         }
     }
+
+    const bool kCompressLogcat = android::base::GetBoolProperty("ro.logcat.compress", false);
 
     // Used for all options
     std::unique_ptr<AndroidLogFormat, decltype(&android_log_format_free)> logformat_{
@@ -154,12 +158,32 @@ static void unpinLogFile(const char* pathname) {
     }
 }
 
-static FILE* openLogFile(const char* path, size_t sizeKB) {
+static void startCompMode(int fd) {
+    // Ignore errors.
+    long flag = FS_COMPR_FL;
+    ioctl(fd, FS_IOC_SETFLAGS, &flag);
+}
+
+static void releaseCompBlocks(const char* pathname) {
+    int fd = open(pathname, O_RDONLY);
+    if (fd != -1) {
+        // Ignore errors.
+        unsigned long long blkcnt;
+        ioctl(fd, F2FS_IOC_RELEASE_COMPRESS_BLOCKS, &blkcnt);
+        close(fd);
+    }
+}
+
+FILE* Logcat::OpenLogFile(const char* path, size_t sizeKB) {
     int fd = open(path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP);
     if (fd == -1) {
         error(EXIT_FAILURE, errno, "couldn't open output file '%s'", path);
     }
-    pinLogFile(fd, sizeKB);
+    if (!kCompressLogcat) {
+        pinLogFile(fd, sizeKB);
+    } else {
+        startCompMode(fd);
+    }
     return fdopen(fd, "w");
 }
 
@@ -169,6 +193,10 @@ void Logcat::RotateLogs() {
 
     fclose(output_file_);
     output_file_ = nullptr;
+
+    if (kCompressLogcat) {
+        releaseCompBlocks(output_file_name_);
+    }
 
     // Compute the maximum number of digits needed to count up to
     // maxRotatedLogs in decimal.  eg:
@@ -194,7 +222,9 @@ void Logcat::RotateLogs() {
             break;
         }
 
-        unpinLogFile(file0.c_str());
+        if (!kCompressLogcat) {
+            unpinLogFile(file0.c_str());
+        }
 
         if (rename(file0.c_str(), file1.c_str()) == -1 && errno != ENOENT) {
             error(0, errno, "rename('%s', '%s') failed while rotating log files", file0.c_str(),
@@ -202,7 +232,7 @@ void Logcat::RotateLogs() {
         }
     }
 
-    output_file_ = openLogFile(output_file_name_, log_rotate_size_kb_);
+    output_file_ = OpenLogFile(output_file_name_, log_rotate_size_kb_);
     out_byte_count_ = 0;
 }
 
@@ -347,7 +377,7 @@ void Logcat::SetupOutputAndSchedulingPolicy(bool blocking) {
         }
     }
 
-    output_file_ = openLogFile(output_file_name_, log_rotate_size_kb_);
+    output_file_ = OpenLogFile(output_file_name_, log_rotate_size_kb_);
 
     struct stat sb;
     if (fstat(fileno(output_file_), &sb) == -1) {
