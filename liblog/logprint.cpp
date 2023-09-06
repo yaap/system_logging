@@ -1211,7 +1211,7 @@ static void convertMonotonic(struct timespec* result, const AndroidLogEntry* ent
         static const char resume[] = "PM: suspend exit ";
         static const char healthd[] = "healthd";
         static const char battery[] = ": battery ";
-        static const char suspended[] = "Suspended for ";
+        static const char suspended[] = "suspended for ";
         struct timespec monotonic;
         struct tm tm;
         char *cp, *e = line;
