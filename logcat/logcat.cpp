@@ -89,7 +89,7 @@ class Logcat {
     int Run(int argc, char** argv);
 
   private:
-    FILE* OpenLogFile(const char* path, size_t sizeKB);
+    FILE* OpenLogFile(const char* path);
     void RotateLogs();
     void ProcessBuffer(struct log_msg* buf);
     LogcatPriorityProto GetProtoPriority(const AndroidLogEntry& entry);
@@ -141,23 +141,6 @@ class Logcat {
     ProcessNames process_names_;
 };
 
-static void pinLogFile(int fd, size_t sizeKB) {
-    // Ignore errors.
-    uint32_t set = 1;
-    ioctl(fd, F2FS_IOC_SET_PIN_FILE, &set);
-    fallocate(fd, FALLOC_FL_KEEP_SIZE, 0, (sizeKB << 10));
-}
-
-static void unpinLogFile(const char* pathname) {
-    int fd = open(pathname, O_WRONLY | O_CLOEXEC);
-    if (fd != -1) {
-        // Ignore errors.
-        uint32_t set = 0;
-        ioctl(fd, F2FS_IOC_SET_PIN_FILE, &set);
-        close(fd);
-    }
-}
-
 static void startCompMode(int fd) {
     // Ignore errors.
     long flag = FS_COMPR_FL;
@@ -174,14 +157,12 @@ static void releaseCompBlocks(const char* pathname) {
     }
 }
 
-FILE* Logcat::OpenLogFile(const char* path, size_t sizeKB) {
+FILE* Logcat::OpenLogFile(const char* path) {
     int fd = open(path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP);
     if (fd == -1) {
         error(EXIT_FAILURE, errno, "couldn't open output file '%s'", path);
     }
-    if (!kCompressLogcat) {
-        pinLogFile(fd, sizeKB);
-    } else {
+    if (kCompressLogcat) {
         startCompMode(fd);
     }
     return fdopen(fd, "w");
@@ -222,17 +203,13 @@ void Logcat::RotateLogs() {
             break;
         }
 
-        if (!kCompressLogcat) {
-            unpinLogFile(file0.c_str());
-        }
-
         if (rename(file0.c_str(), file1.c_str()) == -1 && errno != ENOENT) {
             error(0, errno, "rename('%s', '%s') failed while rotating log files", file0.c_str(),
                   file1.c_str());
         }
     }
 
-    output_file_ = OpenLogFile(output_file_name_, log_rotate_size_kb_);
+    output_file_ = OpenLogFile(output_file_name_);
     out_byte_count_ = 0;
 }
 
@@ -377,7 +354,7 @@ void Logcat::SetupOutputAndSchedulingPolicy(bool blocking) {
         }
     }
 
-    output_file_ = OpenLogFile(output_file_name_, log_rotate_size_kb_);
+    output_file_ = OpenLogFile(output_file_name_);
 
     struct stat sb;
     if (fstat(fileno(output_file_), &sb) == -1) {
