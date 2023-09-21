@@ -40,7 +40,7 @@ static const char priority_message[] = { KMSG_PRIORITY(LOG_INFO), '\0' };
 // List of the _only_ needles we supply here to android::strnstr
 static const char suspendStr[] = "PM: suspend entry ";
 static const char resumeStr[] = "PM: suspend exit ";
-static const char suspendedStr[] = "Suspended for ";
+static const char suspendedStr[] = "suspended for ";
 static const char healthdStr[] = "healthd";
 static const char batteryStr[] = ": battery ";
 static const char auditStr[] = " audit(";
@@ -323,7 +323,7 @@ log_time LogKlog::sniffTime(const char*& buf, ssize_t len, bool reverse) {
             log_time mono(CLOCK_MONOTONIC);
             correction = (real < mono) ? log_time(log_time::EPOCH) : (real - mono);
         } else if (((b = android::strnstr(cp, len, suspendedStr))) &&
-                   (((b += strlen(suspendStr)) - cp) < len)) {
+                   (((b += strlen(suspendedStr)) - cp) < len)) {
             len -= b - cp;
             log_time real(log_time::EPOCH);
             char* endp;
