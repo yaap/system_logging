@@ -60,8 +60,8 @@ TEST(liblog, convertPrintable_escapes) {
 TEST(liblog, convertPrintable_validutf8) {
   setlocale(LC_ALL, "C.UTF-8");
 
-  auto input = u8"¢ह€𐍈";
-  auto output_size = convertPrintable(nullptr, input, strlen(input));
+  const char* input = u8"¢ह€𐍈";
+  size_t output_size = convertPrintable(nullptr, input, strlen(input));
   EXPECT_EQ(output_size, strlen(input));
 
   char output[output_size + 1];
