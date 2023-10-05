@@ -60,7 +60,7 @@ TEST(liblog, convertPrintable_escapes) {
 TEST(liblog, convertPrintable_validutf8) {
   setlocale(LC_ALL, "C.UTF-8");
 
-  const char* input = u8"¢ह€𐍈";
+  const char* input = "¢ह€𐍈";
   size_t output_size = convertPrintable(nullptr, input, strlen(input));
   EXPECT_EQ(output_size, strlen(input));
 
@@ -88,12 +88,12 @@ TEST(liblog, convertPrintable_invalidutf8) {
 TEST(liblog, convertPrintable_mixed) {
   setlocale(LC_ALL, "C.UTF-8");
 
-  auto input =
-      u8"\x80\xC2¢ह€𐍈\x01\xE0\xA4\x06¢ह€𐍈\xE0\x06\a\b\xF0\x90¢ह€𐍈\x8D\x06\xF0\t\t\x90\x06\xF0\x0E";
-  auto expected_output =
-      u8"\\x80\\xC2¢ह€𐍈\\x01\\xE0\\xA4\\x06¢ह€𐍈\\xE0\\x06\\a\\b\\xF0\\x90¢ह€𐍈\\x8D\\x06\\xF0\t\t"
-      u8"\\x90\\x06\\xF0\\x0E";
-  auto output_size = convertPrintable(nullptr, input, strlen(input));
+  const char* input =
+      "\x80\xC2¢ह€𐍈\x01\xE0\xA4\x06¢ह€𐍈\xE0\x06\a\b\xF0\x90¢ह€𐍈\x8D\x06\xF0\t\t\x90\x06\xF0\x0E";
+  const char* expected_output =
+      "\\x80\\xC2¢ह€𐍈\\x01\\xE0\\xA4\\x06¢ह€𐍈\\xE0\\x06\\a\\b\\xF0\\x90¢ह€𐍈\\x8D\\x06\\xF0\t\t"
+      "\\x90\\x06\\xF0\\x0E";
+  size_t output_size = convertPrintable(nullptr, input, strlen(input));
   EXPECT_EQ(output_size, strlen(expected_output));
 
   char output[output_size + 1];
