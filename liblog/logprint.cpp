@@ -1211,8 +1211,6 @@ static void convertMonotonic(struct timespec* result, const AndroidLogEntry* ent
       while (getline(&line, &len, p) > 0) {
         static const char suspend[] = "PM: suspend entry ";
         static const char resume[] = "PM: suspend exit ";
-        static const char healthd[] = "healthd";
-        static const char battery[] = ": battery ";
         static const char suspended[] = "suspended for ";
         struct timespec monotonic;
         struct tm tm;
@@ -1242,11 +1240,6 @@ static void convertMonotonic(struct timespec* result, const AndroidLogEntry* ent
           e += sizeof(suspend) - 1;
         } else if ((e = strstr(line, resume))) {
           e += sizeof(resume) - 1;
-        } else if (((e = strstr(line, healthd))) &&
-                   ((e = strstr(e + sizeof(healthd) - 1, battery)))) {
-          /* NB: healthd is roughly 150us late, worth the price to
-           * deal with ntp-induced or hardware clock drift. */
-          e += sizeof(battery) - 1;
         } else if ((e = strstr(line, suspended))) {
           e += sizeof(suspended) - 1;
           e = readSeconds(e, &time);
