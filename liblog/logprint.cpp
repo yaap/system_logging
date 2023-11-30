@@ -1124,7 +1124,7 @@ size_t convertPrintable(char* p, const char* message, size_t messageLen) {
           strcpy(buf, "\\r");
         } else if (*message == '\\') {
           strcpy(buf, "\\\\");
-        } else if ((*message < ' ') || (*message & 0x80)) {
+        } else if ((*message < ' ') || (*message >= 0x7f)) {
           snprintf(buf, sizeof(buf), "\\x%02X", static_cast<unsigned char>(*message));
         }
       }
