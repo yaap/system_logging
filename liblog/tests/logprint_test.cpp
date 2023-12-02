@@ -39,12 +39,12 @@ TEST(liblog, convertPrintable_ascii) {
 }
 
 TEST(liblog, convertPrintable_escapes) {
-  std::string input = "escape\x00\a\b\t\v\f\r\\"s;
+  std::string input = "escape\x00\x7f\a\b\t\v\f\r\\"s;
   // We want to test escaping of ASCII NUL at the end too.
   auto input_size = input.size() + 1;
 
   // Note that \t is not escaped.
-  std::string expected_output = "escape\\x00\\a\\b\t\\v\\f\\r\\\\\\x00"s;
+  std::string expected_output = "escape\\x00\\x7F\\a\\b\t\\v\\f\\r\\\\\\x00"s;
   auto expected_output_size = expected_output.size();
 
   auto output_size = convertPrintable(nullptr, input.c_str(), input_size);
