@@ -1099,9 +1099,9 @@ size_t convertPrintable(char* dst0, const char* src0, size_t n) {
   bool print = (dst != nullptr);
 
   while (n > 0) {
-    // ASCII fast path to cover most logging; space/tab/newline aren't escaped,
+    // ASCII fast path to cover most logging; space and tab aren't escaped,
     // but backslash is.
-    if ((*src >= ' ' && *src < 0x7f && *src != '\\') || *src == '\n' || *src == '\t') {
+    if ((*src >= ' ' && *src < 0x7f && *src != '\\') || *src == '\t') {
       if (print) *dst = *src;
       dst++;
       src++;
