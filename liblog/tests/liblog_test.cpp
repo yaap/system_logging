@@ -46,6 +46,8 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
+#include "test_utils.h"
+
 using android::base::make_scope_guard;
 
 // #define ENABLE_FLAKY_TESTS
@@ -69,12 +71,6 @@ using android::base::make_scope_guard;
 struct ListCloser {
   void operator()(struct logger_list* list) { android_logger_list_close(list); }
 };
-
-// Devices can set a system property indicating a slower device, giving a
-// multiplier to use for timeouts.  If the device has set this property, we use it.
-static unsigned int getAlarmSeconds(unsigned int seconds) {
-  return seconds * android::base::GetIntProperty("ro.hw_timeout_multiplier", 1);
-}
 
 // This function is meant to be used for most log tests, it does the following:
 // 1) Open the log_buffer with a blocking reader
