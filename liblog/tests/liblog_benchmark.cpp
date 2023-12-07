@@ -35,6 +35,8 @@
 #include <log/log_read.h>
 #include <private/android_logger.h>
 
+#include "test_utils.h"
+
 size_t convertPrintable(char*, const char*, size_t);
 
 BENCHMARK_MAIN();
@@ -636,7 +638,7 @@ static unsigned long long caught_convert(char* cp) {
   return l;
 }
 
-static const int alarm_time = 3;
+static const int alarm_time = getAlarmSeconds(3);
 
 /*
  *	Measure the time it takes for the logd posting call to acquire the
