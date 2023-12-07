@@ -315,4 +315,8 @@ int __android_log_is_debuggable() {
   return 1;
 }
 
+int __android_log_security() {
+  return 0;
+}
+
 #endif
