@@ -425,6 +425,8 @@ static void show_help() {
       within AID_SYSTEM when AID_SYSTEM is the noisiest UID.
   -P, --prune='LIST ...'
       Set prune rules, using same format as listed above. Must be quoted.
+  -S, --statistics
+      Output statistics. With --pid provides pid-specific stats.
 
   Filtering:
 
@@ -614,6 +616,7 @@ int Logcat::Run(int argc, char** argv) {
             false;  // Do not report errors on the security buffer unless it is explicitly named.
     bool getLogSize = false;
     bool getPruneList = false;
+    bool printStatistics = false;
     unsigned long setLogSize = 0;
     const char* setPruneList = nullptr;
     const char* setId = nullptr;
@@ -671,6 +674,7 @@ int Logcat::Run(int argc, char** argv) {
           { "regex",         required_argument, nullptr, 'e' },
           { "rotate-count",  required_argument, nullptr, 'n' },
           { "rotate-kbytes", required_argument, nullptr, 'r' },
+          { "statistics",    no_argument,       nullptr, 'S' },
           // hidden and undocumented reserved alias for -t
           { "tail",          required_argument, nullptr, 't' },
           { uid_str,         required_argument, nullptr, 0 },
@@ -872,6 +876,10 @@ int Logcat::Run(int argc, char** argv) {
                 }
                 break;
 
+            case 'S':
+                printStatistics = true;
+                break;
+
             case ':':
                 error(EXIT_FAILURE, 0, "Option '%s' needs an argument.", argv[optind - 1]);
                 break;
@@ -973,8 +981,8 @@ int Logcat::Run(int argc, char** argv) {
     }
 
     if (mode & ANDROID_LOG_PSTORE) {
-        if (setLogSize || getLogSize || getPruneList || setPruneList) {
-            error(EXIT_FAILURE, 0, "-L is incompatible with -g/-G and -p/-P.");
+        if (setLogSize || getLogSize || printStatistics || getPruneList || setPruneList) {
+            error(EXIT_FAILURE, 0, "-L is incompatible with -g/-G, -S, and -p/-P.");
         }
         if (clearLog) {
             if (output_file_name_) {
@@ -986,8 +994,8 @@ int Logcat::Run(int argc, char** argv) {
     }
 
     if (output_file_name_) {
-        if (setLogSize || getLogSize || getPruneList || setPruneList) {
-            error(EXIT_FAILURE, 0, "-f is incompatible with -g/-G and -p/-P.");
+        if (setLogSize || getLogSize || printStatistics || getPruneList || setPruneList) {
+            error(EXIT_FAILURE, 0, "-f is incompatible with -g/-G, -S, and -p/-P.");
         }
 
         if (clearLog || setId) {
@@ -1101,13 +1109,17 @@ int Logcat::Run(int argc, char** argv) {
         return EXIT_SUCCESS;
     }
 
-    if (getPruneList) {
+    if (printStatistics || getPruneList) {
         std::string buf(8192, '\0');
-        int retry = 32;
         size_t ret_length = 0;
+        int retry = 32;
 
         for (; retry >= 0; --retry) {
-            android_logger_get_prune_list(logger_list.get(), buf.data(), buf.size());
+            if (getPruneList) {
+                android_logger_get_prune_list(logger_list.get(), buf.data(), buf.size());
+            } else {
+                android_logger_get_statistics(logger_list.get(), buf.data(), buf.size());
+            }
 
             ret_length = atol(buf.c_str());
             if (ret_length < 3) {
