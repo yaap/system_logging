@@ -43,9 +43,7 @@ static int get_ack(int fd) {
     if (rep.nlh.nlmsg_type == NLMSG_ERROR) {
         audit_get_reply(fd, &rep, GET_REPLY_BLOCKING, 0);
         rc = reinterpret_cast<struct nlmsgerr*>(rep.data)->error;
-        if (rc) {
-            return -rc;
-        }
+        return rc;
     }
 
     return 0;
