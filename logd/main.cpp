@@ -242,8 +242,7 @@ int main(int argc, char* argv[]) {
 
     std::string buffer_type = GetProperty("logd.buffer_type", "serialized");
 
-    LogStatistics log_statistics(GetBoolPropertyEngSvelteDefault("logd.statistics"),
-                                 buffer_type == "serialized");
+    LogStatistics log_statistics(false, buffer_type == "serialized");
 
     // Serves the purpose of managing the last logs times read on a socket connection, and as a
     // reader lock on a range of log entries.
