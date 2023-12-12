@@ -107,22 +107,6 @@ static void DropPrivs(bool klogd, bool auditd) {
     }
 }
 
-// GetBoolProperty that defaults to true if `ro.debuggable == true && ro.config.low_rawm == false`.
-static bool GetBoolPropertyDebuggableSvelteDefault(const std::string& name) {
-    bool default_value =
-            GetBoolProperty("ro.debuggable", false) && !GetBoolProperty("ro.config.low_ram", false);
-
-    return GetBoolProperty(name, default_value);
-}
-
-// GetBoolProperty that defaults to true if `ro.build.type == eng && ro.config.low_rawm == false`.
-static bool GetBoolPropertyEngSvelteDefault(const std::string& name) {
-    bool default_value = (GetProperty("ro.build.type", "user").compare("eng") == 0) &&
-                         !GetBoolProperty("ro.config.low_ram", false);
-
-    return GetBoolProperty(name, default_value);
-}
-
 static void readDmesg(LogAudit* al, LogKlog* kl) {
     if (!al && !kl) {
         return;
@@ -227,7 +211,9 @@ int main(int argc, char* argv[]) {
     }
 
     int fdPmesg = -1;
-    bool klogd = GetBoolPropertyDebuggableSvelteDefault("ro.logd.kernel");
+    bool klogd_default =
+            GetBoolProperty("ro.debuggable", false) && !GetBoolProperty("ro.config.low_ram", false);
+    bool klogd = GetBoolProperty("ro.logd.kernel", klogd_default);
     if (klogd) {
         SetProperty("ro.logd.kernel", "true");
         static const char proc_kmsg[] = "/proc/kmsg";
