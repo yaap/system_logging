@@ -28,6 +28,8 @@
 #include <log/log_read.h>
 #include <log/log_time.h>
 
+#include "test_utils.h"
+
 #ifdef __ANDROID__
 static void read_with_wrap() {
   // Read the last line in the log to get a starting timestamp. We're assuming
@@ -68,7 +70,7 @@ TEST(liblog, wrap_mode_blocks) {
   struct sigaction ignore = {.sa_handler = [](int) { _exit(0); }};
   struct sigaction old_sigaction;
   sigaction(SIGALRM, &ignore, &old_sigaction);
-  alarm(5);
+  alarm(getAlarmSeconds(5));
 
   android::base::Timer timer;
   read_with_wrap();

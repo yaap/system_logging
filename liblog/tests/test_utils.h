@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Android Open Source Project
+ * Copyright (C) 2023 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,10 @@
  * limitations under the License.
  */
 
-#include <fuzzer/FuzzedDataProvider.h>
+#include <android-base/properties.h>
 
-size_t convertPrintable(char*, const char*, size_t);
-
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t length) {
-  FuzzedDataProvider dataProvider(data, length);
-  std::string contents = dataProvider.ConsumeRemainingBytesAsString();
-
-  size_t size = convertPrintable(nullptr, contents.data(), contents.size());
-
-  char buf[size + 1];
-  convertPrintable(buf, contents.data(), contents.size());
-
-  return 0;
+// Devices can set a system property indicating a slower device, giving a
+// multiplier to use for timeouts.  If the device has set this property, we use it.
+static unsigned int getAlarmSeconds(unsigned int seconds) {
+  return seconds * android::base::GetIntProperty("ro.hw_timeout_multiplier", 1);
 }

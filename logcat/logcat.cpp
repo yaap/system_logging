@@ -21,6 +21,8 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <linux/f2fs.h>
+#include <linux/fs.h>
+#include <malloc.h>
 #include <math.h>
 #include <sched.h>
 #include <stdarg.h>
@@ -57,6 +59,11 @@
 #include <private/android_logger.h>
 #include <processgroup/sched_policy.h>
 #include <system/thread_defs.h>
+#include "logcat.pb.h"
+#include "process_names.h"
+
+using com::android::logcat::proto::LogcatEntryProto;
+using com::android::logcat::proto::LogcatPriorityProto;
 
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
@@ -68,13 +75,25 @@ using android::base::StringPrintf;
 using android::base::WaitForProperty;
 using android::base::WriteFully;
 
+namespace {
+enum OutputType {
+    TEXT,    // Human-readable formatted
+    BINARY,  // Raw struct log_msg as obtained from logd
+    PROTO    // Protobuffer format. See logcat.proto for details. Each message is prefixed with
+             // 8 bytes (little endian) size of the message.
+};
+}  // namespace
+
 class Logcat {
   public:
     int Run(int argc, char** argv);
 
   private:
+    FILE* OpenLogFile(const char* path);
     void RotateLogs();
     void ProcessBuffer(struct log_msg* buf);
+    LogcatPriorityProto GetProtoPriority(const AndroidLogEntry& entry);
+    uint64_t PrintToProto(const AndroidLogEntry& entry);
     void PrintDividers(log_id_t log_id, bool print_dividers);
     void SetupOutputAndSchedulingPolicy(bool blocking);
     int SetLogFormat(const char* format_string);
@@ -83,6 +102,8 @@ class Logcat {
             error(EXIT_FAILURE, errno, "Write to output file failed");
         }
     }
+
+    const bool kCompressLogcat = android::base::GetBoolProperty("ro.logcat.compress", false);
 
     // Used for all options
     std::unique_ptr<AndroidLogFormat, decltype(&android_log_format_free)> logformat_{
@@ -97,8 +118,9 @@ class Logcat {
     size_t max_rotated_logs_ = DEFAULT_MAX_ROTATED_LOGS;  // 0 means "unbounded"
     uint64_t out_byte_count_ = 0;
 
+    enum OutputType output_type_ = TEXT;
+
     // For binary log buffers
-    int print_binary_ = 0;
     std::unique_ptr<EventTagMap, decltype(&android_closeEventTagMap)> event_tag_map_{
             nullptr, &android_closeEventTagMap};
     bool has_opened_event_tag_map_ = false;
@@ -115,31 +137,34 @@ class Logcat {
     bool printed_start_[LOG_ID_MAX] = {};
 
     bool debug_ = false;
+
+    ProcessNames process_names_;
 };
 
-static void pinLogFile(int fd, size_t sizeKB) {
+static void startCompMode(int fd) {
     // Ignore errors.
-    uint32_t set = 1;
-    ioctl(fd, F2FS_IOC_SET_PIN_FILE, &set);
-    fallocate(fd, FALLOC_FL_KEEP_SIZE, 0, (sizeKB << 10));
+    long flag = FS_COMPR_FL;
+    ioctl(fd, FS_IOC_SETFLAGS, &flag);
 }
 
-static void unpinLogFile(const char* pathname) {
-    int fd = open(pathname, O_WRONLY | O_CLOEXEC);
+static void releaseCompBlocks(const char* pathname) {
+    int fd = open(pathname, O_RDONLY);
     if (fd != -1) {
         // Ignore errors.
-        uint32_t set = 0;
-        ioctl(fd, F2FS_IOC_SET_PIN_FILE, &set);
+        unsigned long long blkcnt;
+        ioctl(fd, F2FS_IOC_RELEASE_COMPRESS_BLOCKS, &blkcnt);
         close(fd);
     }
 }
 
-static FILE* openLogFile(const char* path, size_t sizeKB) {
+FILE* Logcat::OpenLogFile(const char* path) {
     int fd = open(path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP);
     if (fd == -1) {
         error(EXIT_FAILURE, errno, "couldn't open output file '%s'", path);
     }
-    pinLogFile(fd, sizeKB);
+    if (kCompressLogcat) {
+        startCompMode(fd);
+    }
     return fdopen(fd, "w");
 }
 
@@ -149,6 +174,10 @@ void Logcat::RotateLogs() {
 
     fclose(output_file_);
     output_file_ = nullptr;
+
+    if (kCompressLogcat) {
+        releaseCompBlocks(output_file_name_);
+    }
 
     // Compute the maximum number of digits needed to count up to
     // maxRotatedLogs in decimal.  eg:
@@ -174,15 +203,13 @@ void Logcat::RotateLogs() {
             break;
         }
 
-        unpinLogFile(file0.c_str());
-
         if (rename(file0.c_str(), file1.c_str()) == -1 && errno != ENOENT) {
             error(0, errno, "rename('%s', '%s') failed while rotating log files", file0.c_str(),
                   file1.c_str());
         }
     }
 
-    output_file_ = openLogFile(output_file_name_, log_rotate_size_kb_);
+    output_file_ = OpenLogFile(output_file_name_);
     out_byte_count_ = 0;
 }
 
@@ -216,14 +243,80 @@ void Logcat::ProcessBuffer(struct log_msg* buf) {
 
         print_count_ += match;
         if (match || print_it_anyway_) {
-            PrintDividers(buf->id(), print_dividers_);
-            out_byte_count_ += android_log_printLogLine(logformat_.get(), output_file_, &entry);
+            switch (output_type_) {
+                case TEXT: {
+                    PrintDividers(buf->id(), print_dividers_);
+                    out_byte_count_ +=
+                            android_log_printLogLine(logformat_.get(), output_file_, &entry);
+                    break;
+                }
+                case PROTO: {
+                    out_byte_count_ += PrintToProto(entry);
+                    break;
+                }
+                case BINARY: {
+                    error(EXIT_FAILURE, errno, "Binary output reached ProcessBuffer");
+                }
+            }
         }
     }
 
     if (log_rotate_size_kb_ > 0 && (out_byte_count_ / 1024) >= log_rotate_size_kb_) {
         RotateLogs();
     }
+}
+
+LogcatPriorityProto Logcat::GetProtoPriority(const AndroidLogEntry& entry) {
+    switch (entry.priority) {
+        case ANDROID_LOG_UNKNOWN:
+            return com::android::logcat::proto::UNKNOWN;
+        case ANDROID_LOG_DEFAULT:
+            return com::android::logcat::proto::DEFAULT;
+        case ANDROID_LOG_VERBOSE:
+            return com::android::logcat::proto::VERBOSE;
+        case ANDROID_LOG_DEBUG:
+            return com::android::logcat::proto::DEBUG;
+        case ANDROID_LOG_INFO:
+            return com::android::logcat::proto::INFO;
+        case ANDROID_LOG_WARN:
+            return com::android::logcat::proto::WARN;
+        case ANDROID_LOG_ERROR:
+            return com::android::logcat::proto::ERROR;
+        case ANDROID_LOG_FATAL:
+            return com::android::logcat::proto::FATAL;
+        case ANDROID_LOG_SILENT:
+            return com::android::logcat::proto::SILENT;
+    }
+    return com::android::logcat::proto::UNKNOWN;
+}
+uint64_t Logcat::PrintToProto(const AndroidLogEntry& entry) {
+    // Convert AndroidLogEntry to LogcatEntryProto
+    LogcatEntryProto proto;
+    proto.set_time_sec(entry.tv_sec);
+    proto.set_time_nsec(entry.tv_nsec);
+    proto.set_priority(GetProtoPriority(entry));
+    proto.set_uid(entry.uid);
+    proto.set_pid(entry.pid);
+    proto.set_tid(entry.tid);
+    proto.set_tag(entry.tag, entry.tagLen);
+    proto.set_message(entry.message, entry.messageLen);
+    const std::string name = process_names_.Get(entry.pid);
+    if (!name.empty()) {
+        proto.set_process_name(name);
+    }
+
+    // Serialize
+    std::string data;
+    proto.SerializeToString(&data);
+
+    uint64_t size = data.length();
+    WriteFully(&size, sizeof(size));
+
+    // Write proto
+    WriteFully(data.data(), data.length());
+
+    // Return how many bytes we wrote so log file rotation can happen
+    return sizeof(size) + sizeof(data.length());
 }
 
 void Logcat::PrintDividers(log_id_t log_id, bool print_dividers) {
@@ -261,7 +354,7 @@ void Logcat::SetupOutputAndSchedulingPolicy(bool blocking) {
         }
     }
 
-    output_file_ = openLogFile(output_file_name_, log_rotate_size_kb_);
+    output_file_ = OpenLogFile(output_file_name_);
 
     struct stat sb;
     if (fstat(fileno(output_file_), &sb) == -1) {
@@ -300,6 +393,7 @@ static void show_help() {
   -v, --format=FORMAT         Sets log print format. See FORMAT below.
   -D, --dividers              Print dividers between each log buffer.
   -B, --binary                Output the log in binary.
+      --proto                 Output the log in protobuffer.
 
   Output files:
 
@@ -554,6 +648,7 @@ int Logcat::Run(int argc, char** argv) {
         static const char wrap_str[] = "wrap";
         static const char print_str[] = "print";
         static const char uid_str[] = "uid";
+        static const char proto_str[] = "proto";
         // clang-format off
         static const struct option long_options[] = {
           { "binary",        no_argument,       nullptr, 'B' },
@@ -575,6 +670,7 @@ int Logcat::Run(int argc, char** argv) {
           { pid_str,         required_argument, nullptr, 0 },
           { print_str,       no_argument,       nullptr, 0 },
           { "prune",         optional_argument, nullptr, 'p' },
+          { proto_str,         no_argument,       nullptr, 0 },
           { "regex",         required_argument, nullptr, 'e' },
           { "rotate-count",  required_argument, nullptr, 'n' },
           { "rotate-kbytes", required_argument, nullptr, 'r' },
@@ -601,8 +697,7 @@ int Logcat::Run(int argc, char** argv) {
                     }
 
                     if (!ParseUint(optarg, &pid) || pid < 1) {
-                        error(EXIT_FAILURE, 0, "%s %s out of range.",
-                              long_options[option_index].name, optarg);
+                        error(EXIT_FAILURE, 0, "pid '%s' out of range.", optarg);
                     }
                     break;
                 }
@@ -611,13 +706,11 @@ int Logcat::Run(int argc, char** argv) {
                     // ToDo: implement API that supports setting a wrap timeout
                     size_t timeout = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
                     if (optarg && (!ParseUint(optarg, &timeout) || timeout < 1)) {
-                        error(EXIT_FAILURE, 0, "%s %s out of range.",
-                              long_options[option_index].name, optarg);
+                        error(EXIT_FAILURE, 0, "wrap timeout '%s' out of range.", optarg);
                     }
                     if (timeout != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) {
-                        fprintf(stderr, "WARNING: %s %u seconds, ignoring %zu\n",
-                                long_options[option_index].name, ANDROID_LOG_WRAP_DEFAULT_TIMEOUT,
-                                timeout);
+                        fprintf(stderr, "WARNING: wrap timeout %zus, not default %us\n", timeout,
+                                ANDROID_LOG_WRAP_DEFAULT_TIMEOUT);
                     }
                     break;
                 }
@@ -641,6 +734,10 @@ int Logcat::Run(int argc, char** argv) {
                         }
                         uids.emplace(uid);
                     }
+                    break;
+                }
+                if (long_options[option_index].name == proto_str) {
+                    output_type_ = PROTO;
                     break;
                 }
                 break;
@@ -735,8 +832,7 @@ int Logcat::Run(int argc, char** argv) {
                     } else {
                         log_id_t log_id = android_name_to_log_id(buffer.c_str());
                         if (log_id >= LOG_ID_MAX) {
-                            error(EXIT_FAILURE, 0, "Unknown buffer '%s' listed for -b.",
-                                  buffer.c_str());
+                            error(EXIT_FAILURE, 0, "Unknown -b buffer '%s'.", buffer.c_str());
                         }
                         if (log_id == LOG_ID_SECURITY) {
                             security_buffer_selected = true;
@@ -747,7 +843,7 @@ int Logcat::Run(int argc, char** argv) {
                 break;
 
             case 'B':
-                print_binary_ = 1;
+                output_type_ = BINARY;
                 break;
 
             case 'f':
@@ -760,13 +856,13 @@ int Logcat::Run(int argc, char** argv) {
 
             case 'r':
                 if (!ParseUint(optarg, &log_rotate_size_kb_) || log_rotate_size_kb_ < 1) {
-                    error(EXIT_FAILURE, 0, "Invalid parameter '%s' to -r.", optarg);
+                    error(EXIT_FAILURE, 0, "Invalid -r '%s'.", optarg);
                 }
                 break;
 
             case 'n':
                 if (!ParseUint(optarg, &max_rotated_logs_) || max_rotated_logs_ < 1) {
-                    error(EXIT_FAILURE, 0, "Invalid parameter '%s' to -n.", optarg);
+                    error(EXIT_FAILURE, 0, "Invalid -n '%s'.", optarg);
                 }
                 break;
 
@@ -774,7 +870,7 @@ int Logcat::Run(int argc, char** argv) {
                 for (const auto& arg : Split(optarg, delimiters)) {
                     int err = SetLogFormat(arg.c_str());
                     if (err < 0) {
-                        error(EXIT_FAILURE, 0, "Invalid parameter '%s' to -v.", arg.c_str());
+                        error(EXIT_FAILURE, 0, "Invalid -v '%s'.", arg.c_str());
                     }
                     if (err) hasSetLogFormat = true;
                 }
@@ -859,7 +955,8 @@ int Logcat::Run(int argc, char** argv) {
     if (forceFilters.size()) {
         int err = android_log_addFilterString(logformat_.get(), forceFilters.c_str());
         if (err < 0) {
-            error(EXIT_FAILURE, 0, "Invalid filter expression in logcat args.");
+            error(EXIT_FAILURE, 0, "Invalid filter expression '%s' in logcat args.",
+                  forceFilters.c_str());
         }
     } else if (argc == optind) {
         // Add from environment variable
@@ -869,7 +966,8 @@ int Logcat::Run(int argc, char** argv) {
             int err = android_log_addFilterString(logformat_.get(), env_tags_orig);
 
             if (err < 0) {
-                error(EXIT_FAILURE, 0, "Invalid filter expression in ANDROID_LOG_TAGS.");
+                error(EXIT_FAILURE, 0, "Invalid filter expression '%s' in ANDROID_LOG_TAGS.",
+                      env_tags_orig);
             }
         }
     } else {
@@ -1006,7 +1104,7 @@ int Logcat::Run(int argc, char** argv) {
     if (setPruneList) {
         size_t len = strlen(setPruneList);
         if (android_logger_set_prune_list(logger_list.get(), setPruneList, len)) {
-            error(EXIT_FAILURE, 0, "Failed to set the prune list.");
+            error(EXIT_FAILURE, 0, "Failed to set the prune list to '%s'.", setPruneList);
         }
         return EXIT_SUCCESS;
     }
@@ -1058,6 +1156,11 @@ int Logcat::Run(int argc, char** argv) {
     bool blocking = !(mode & ANDROID_LOG_NONBLOCK);
     SetupOutputAndSchedulingPolicy(blocking);
 
+    // Purge as much memory as possible before going into the log reading loop.
+    // Do this before checking if logd is ready just in case logd isn't
+    // ready and this call can be done without penalizing start up.
+    mallopt(M_PURGE_ALL, 0);
+
     if (!WaitForProperty("logd.ready", "true", std::chrono::seconds(1))) {
         error(EXIT_FAILURE, 0, "Failed to wait for logd.ready to become true. logd not running?");
     }
@@ -1075,8 +1178,13 @@ If you have enabled significant logging, look into using the -G option to increa
         }
 
         if (ret < 0) {
-            if (ret == -EAGAIN) break;
-
+            if (ret == -EAGAIN || ret == -EWOULDBLOCK || ret == -ETIMEDOUT) {
+                // For non-blocking mode, a socket with a 2s timeout is used to read logs.
+                // Either recv returned -EAGAIN or -EWOULDBLOCK (see man recv)
+                // or connect returned -EAGAIN or -ETIMEOUT.
+                // In either case, the caller should call logcat again at a later time.
+                break;
+            }
             if (ret == -EIO) {
                 error(EXIT_FAILURE, 0, "Unexpected EOF!");
             }
@@ -1095,10 +1203,14 @@ If you have enabled significant logging, look into using the -G option to increa
             continue;
         }
 
-        if (print_binary_) {
-            WriteFully(&log_msg, log_msg.len());
-        } else {
-            ProcessBuffer(&log_msg);
+        switch (output_type_) {
+            case BINARY:
+                WriteFully(&log_msg, log_msg.len());
+                break;
+            case TEXT:
+            case PROTO:
+                ProcessBuffer(&log_msg);
+                break;
         }
         if (blocking && output_file_ == stdout) fflush(stdout);
     }

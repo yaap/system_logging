@@ -33,15 +33,16 @@ cc_benchmark {
         "-Wall",
         "-Wextra",
         "-Werror",
+        "-Wno-unused-result",
         "-fno-builtin",
     ],
     shared_libs: [
-        "libm",
         "libbase",
         "libcutils",
     ],
     static_libs: ["liblog"],
     srcs: ["liblog_benchmark.cpp"],
+    host_supported: true,
 }
 
 // -----------------------------------------------------------------------------
@@ -54,6 +55,7 @@ cc_fuzz {
         "liblog_convertPrintable_fuzzer.cpp",
     ],
     static_libs: ["liblog"],
+    host_supported: true,
 }
 
 // -----------------------------------------------------------------------------
@@ -119,6 +121,18 @@ cc_test {
         "device-tests",
     ],
     test_config: "device_test_config.xml",
+    data: [
+        "liblog_device_preparer.sh",
+    ],
+}
+
+sh_test {
+    name: "liblog_device_preparer.sh",
+    src: "liblog_device_preparer.sh",
+    test_suites: [
+        "cts",
+        "general-tests",
+    ],
 }
 
 cc_test_host {
